@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKY-IVY Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 3px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FF 100%);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            font-weight: bold;
+        }
+        
+        #score, #health {
+            margin-bottom: 5px;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            z-index: 20;
+        }
+        
+        #restart-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        #restart-btn:hover {
+            background-color: #45a049;
+        }
+        
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .control-key {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+            margin: 5px;
+            line-height: 40px;
+            font-weight: bold;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <h1>Dog Fight Game</h1>
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="score">Score: 0</div>
+            <div id="health">Health: 100%</div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div id="game-over">
+            <h2>Game Over!</h2>
+            <p id="final-score">Final Score: 0</p>
+            <button id="restart-btn">Play Again</button>
+        </div>
+    </div>
+    <div id="controls">
+        <p>Controls:</p>
+        <div class="control-key">↑</div>
+        <div class="control-key">↓</div>
+        <div class="control-key">←</div>
+        <div class="control-key">→</div>
+        <div class="control-key">Space</div>
+        <p>Move / Shoot</p>
+    </div>
+
+    <script>
+        
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        
+        
+        let score = 0;
+        let health = 100;
+        let gameIsOver = false;
+        
+        
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+        
+      
+        const player = {
+            x: 100,
+            y: CANVAS_HEIGHT / 2,
+            width: 60,
+            height: 40,
+            speed: 5,
+            color: '#8B4513',
+            movingUp: false,
+            movingDown: false,
+            movingLeft: false,
+            movingRight: false,
+            lastShot: 0,
+            shootDelay: 300 
+        };
+        
+        
+        let enemies = [];
+        const enemySpawnRate = 2000; 
+        let lastEnemySpawn = 0;
+        
+       
+        let bullets = [];
+        
+        
+        let enemyBullets = [];
+        
+        
+        let clouds = [];
+        
+        
+        for (let i = 0; i < 5; i++) {
+            clouds.push({
+                x: Math.random() * CANVAS_WIDTH,
+                y: Math.random() * CANVAS_HEIGHT,
+                width: 100 + Math.random() * 50,
+                speed: 1 + Math.random()
+            });
+        }
+        
+       
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+        
+      
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = true;
+                e.preventDefault();
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = false;
+                e.preventDefault();
+            }
+        });
+        
+        
+        document.getElementById('restart-btn').addEventListener('click', resetGame);
+        
+       
+        function drawDog(x, y, width, height, color, isEnemy = false) {
+            ctx.fillStyle = color;
+            
+           
+            ctx.beginPath();
+            ctx.ellipse(x, y, width / 2, height / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+          
+            ctx.beginPath();
+            ctx.ellipse(
+                isEnemy ? x + width / 3 : x - width / 3,
+                y - height / 4,
+                width / 4,
+                height / 4,
+                0, 0, Math.PI * 2
+            );
+            ctx.fill();
+            
+            
+            ctx.beginPath();
+            ctx.moveTo(
+                isEnemy ? x + width / 3 : x - width / 3,
+                y - height / 3
+            );
+            ctx.lineTo(
+                isEnemy ? x + width / 3 : x - width / 3,
+                y - height / 2
+            );
+            ctx.lineTo(
+                isEnemy ? x + width / 2 : x - width / 5,
+                y - height / 3
+            );
+            ctx.fill();
+            
+          
+            
+            ctx.beginPath();
+            ctx.moveTo(
+                isEnemy ? x - width / 2 + 5 : x + width / 2 - 5,
+                y - height / 8
+            );
+            ctx.quadraticCurveTo(
+                isEnemy ? x - width / 1.5 : x + width / 1.5,
+                y + height / 4,
+                isEnemy ? x - width / 2 : x + width / 2,
+                y + height / 8
+            );
+            ctx.fill();
+            
+           
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(
+                isEnemy ? x + width / 3 : x - width / 3,
+                y - height / 4,
+                width / 20,
+                0, Math.PI * 2
+            );
+            ctx.fill();
+            
+          
+            ctx.strokeStyle = isEnemy ? 'red' : 'blue';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(x, y, width / 2 + 5, height / 4, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+       
+        function drawBullet(x, y, isEnemy = false) {
+            ctx.fillStyle = isEnemy ? 'red' : 'yellow';
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+      
+        
+        function drawCloud(x, y, width) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(x, y, width / 4, 0, Math.PI * 2);
+            ctx.arc(x + width / 4, y - width / 8, width / 4, 0, Math.PI * 2);
+            ctx.arc(x + width / 2, y, width / 4, 0, Math.PI * 2);
+            ctx.arc(x + width / 3, y + width / 8, width / 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+       
+        function spawnEnemy() {
+            const enemyColors = ['#A0522D', '#8B0000', '#4B0082', '#8FBC8F'];
+            enemies.push({
+                x: CANVAS_WIDTH,
+                y: Math.random() * (CANVAS_HEIGHT - 80),
+                width: 60,
+                height: 40,
+                speed: 2 + Math.random() * 2,
+                color: enemyColors[Math.floor(Math.random() * enemyColors.length)],
+                lastShot: 0,
+                shootDelay: 1000 + Math.random() * 1000
+            });
+        }
+        
+        
+        function playerShoot() {
+            const now = Date.now();
+            if (now - player.lastShot > player.shootDelay) {
+                bullets.push({
+                    x: player.x + player.width / 2,
+                    y: player.y,
+                    speed: 8,
+                    damage: 10
+                });
+                player.lastShot = now;
+            }
+        }
+        
+       
+        function enemyShoot(enemy) {
+            const now = Date.now();
+            if (now - enemy.lastShot > enemy.shootDelay) {
+                enemyBullets.push({
+                    x: enemy.x - enemy.width / 2,
+                    y: enemy.y,
+                    speed: 5,
+                    damage: 5
+                });
+                enemy.lastShot = now;
+                return true;
+            }
+            return false;
+        }
+        
+      
+        function checkCollision(obj1, obj2) {
+            return (
+                obj1.x < obj2.x + obj2.width &&
+                obj1.x + obj1.width > obj2.x &&
+                obj1.y < obj2.y + obj2.height &&
+                obj1.y + obj1.height > obj2.y
+            );
+        }
+        
+        
+        function update(deltaTime) {
+            if (gameIsOver) return;
+            
+            const now = Date.now();
+            
+            
+            if (now - lastEnemySpawn > enemySpawnRate) {
+                spawnEnemy();
+                lastEnemySpawn = now;
+            }
+            
+            
+            if (keys.ArrowUp) player.y -= player.speed;
+            if (keys.ArrowDown) player.y += player.speed;
+            if (keys.ArrowLeft) player.x -= player.speed;
+            if (keys.ArrowRight) player.x += player.speed;
+            if (keys.Space) playerShoot();
+            
+            
+            player.x = Math.max(0, Math.min(CANVAS_WIDTH - player.width, player.x));
+            player.y = Math.max(0, Math.min(CANVAS_HEIGHT - player.height, player.y));
+            
+            
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].speed;
+                
+               
+                if (bullets[i].x > CANVAS_WIDTH) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (checkCollision(
+                        { x: bullets[i].x, y: bullets[i].y, width: 8, height: 8 },
+                        enemies[j]
+                    )) {
+                        enemies.splice(j, 1);
+                        bullets.splice(i, 1);
+                        score += 10;
+                        break;
+                    }
+                }
+            }
+            
+            
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                enemyBullets[i].x -= enemyBullets[i].speed;
+                
+               
+                if (enemyBullets[i].x < 0) {
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                
+                if (checkCollision(
+                    { x: enemyBullets[i].x, y: enemyBullets[i].y, width: 8, height: 8 },
+                    player
+                )) {
+                    health -= enemyBullets[i].damage;
+                    enemyBullets.splice(i, 1);
+                    
+                    if (health <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+            
+           
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].x -= enemies[i].speed;
+                
+                
+                enemyShoot(enemies[i]);
+                
+                
+                if (enemies[i].x < -enemies[i].width) {
+                    enemies.splice(i, 1);
+                }
+            }
+            
+            
+            for (let i = 0; i < clouds.length; i++) {
+                clouds[i].x -= clouds[i].speed;
+                if (clouds[i].x < -clouds[i].width) {
+                    clouds[i].x = CANVAS_WIDTH;
+                    clouds[i].y = Math.random() * CANVAS_HEIGHT;
+                }
+            }
+            
+            
+            document.getElementById('score').textContent = `Score: ${score}`;
+            document.getElementById('health').textContent = `Health: ${Math.max(0, health)}%`;
+        }
+        
+        
+        function gameOver() {
+            gameIsOver = true;
+            document.getElementById('final-score').textContent = `Final Score: ${score}`;
+            document.getElementById('game-over').style.display = 'block';
+        }
+        
+        
+        function resetGame() {
+            score = 0;
+            health = 100;
+            gameIsOver = false;
+            bullets = [];
+            enemies = [];
+            enemyBullets = [];
+            player.x = 100;
+            player.y = CANVAS_HEIGHT / 2;
+            document.getElementById('game-over').style.display = 'none';
+        }
+        
+        
+        function gameLoop(timestamp) {
+            
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+            skyGradient.addColorStop(0, '#87CEEB');
+            skyGradient.addColorStop(1, '#E0F7FF');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+           
+            for (const cloud of clouds) {
+                drawCloud(cloud.x, cloud.y, cloud.width);
+            }
+            
+            
+            for (const bullet of bullets) {
+                drawBullet(bullet.x, bullet.y);
+            }
+            
+            for (const bullet of enemyBullets) {
+                drawBullet(bullet.x, bullet.y, true);
+            }
+            
+          
+            for (const enemy of enemies) {
+                drawDog(enemy.x, enemy.y, enemy.width, enemy.height, enemy.color, true);
+            }
+            
+            
+            drawDog(player.x, player.y, player.width, player.height, player.color);
+            
+            
+            update(timestamp);
+            
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        
+        requestAnimationFrame(gameLoop);
+    </script>
+    <p>Made by Intern ("C")</p>
+</body>
+</html>
+
